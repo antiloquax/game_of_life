@@ -3,7 +3,7 @@ from tkinter import *
 import time
 
 def main():
-    columns, delay = 50, 0
+    columns, delay = 45, 0
     gol = Gol(columns, delay)
     gol.run() 
 
@@ -63,6 +63,7 @@ class Gol():
         self.generating = self.generations = 0
         self.message="Cleared"
         self.refresh()
+        # Turn off all alive cells.
         for cell in [x for x in self.flat if x.status]:
             cell.toggle(self)
             
@@ -103,14 +104,10 @@ class Gol():
         # Find out status of next generation.
         temp =[]
         for cell in self.flat:
-            for (r,c) in cell.neighbours:
-                try:
-                    cell.nCount += self.cells[r][c].status
-                except IndexError:
-                        pass
-            if cell.status and cell.nCount == 2:
+            count = sum([self.cells[r][c].status for (r, c) in cell.neighbours])
+            if cell.status and count == 2:
                 cell.next = 1
-            elif cell.nCount == 3:
+            elif count == 3:
                 cell.next = 1
             else:
                 cell.next = 0
@@ -139,16 +136,20 @@ class Cell(Button):
         self["command"] = lambda: self.toggle(parent)
         self.row = row
         self.col = col
-        self.nCount = 0
         self.next = 0
         self.neighbours =[]
-        if row > 0 and col > 0:
-            self.neighbours.append((row-1, col-1))
+        
+        # Assign neighbours. Taking care to avoid index errors.
         if row > 0:
-            self.neighbours.extend(((row-1, col), (row-1, col+1)))
-        if col > 0:
-            self.neighbours.extend(((row, col-1), (row+1, col-1)))
-        self.neighbours.extend(((row,col+1), (row+1, col), (row+1, col+1)))
+            if col > 0:
+                self.neighbours.append((row-1, col-1))
+            if col < (parent.size - 1):
+                self.neighbours.extend(((row-1, col), (row-1, col+1)))
+        if row < (parent.size - 1):
+            if  col > 0:
+                self.neighbours.extend(((row, col-1), (row+1, col-1)))
+            if col < (parent.size - 1):
+                self.neighbours.extend(((row,col+1), (row+1, col), (row+1, col+1)))
 
 
     def toggle(self, parent):
