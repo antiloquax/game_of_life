@@ -1,9 +1,11 @@
-# gol.py - game of life
+"""gol.py - game of life using tkinter. """
+
 from tkinter import *
 import time
 
 def main():
-    columns, delay = 45, 0
+    """Create an instance of gol class and run it."""
+    columns, delay = 30, 0
     gol = Gol(columns, delay)
     gol.run() 
 
@@ -13,6 +15,9 @@ class Gol():
         self.size, self.delay = size, delay
         self.generating = self.generations = self.alive = 0
         self.message = "Ready"
+        
+        # Set of live cells & their neighbours.
+        self.watch = set()
   
     def run(self):
         """Set up the GUI and start the loop."""
@@ -20,19 +25,27 @@ class Gol():
         self.gol = Frame(self.root)
         self.gol.grid()
         self.root.title("Game of Life")
+        
+        # Create an empty 2d list to hold all cells.
         self.cells = [[] for x in range(self.size)]
         
-        # use an image for the Cell, so we can specify size in pixels
+        # Flat list of cells - used in some GUI commands.
+        self.flat = [cell for row in self.cells for cell in row]
+        
+        # Use an image for the Cell, so we can specify size in pixels.
         empty = PhotoImage("cell.png", master=self.root)
         
-        # create the cells
+        # Create the cells.
         for row, col in [(row, col) for row in range(self.size) for col in range(self.size)]:
             self.cells[row].append(Cell(self.gol, image=empty, height=10, width=10, relief="flat", bg="grey", activebackground="white"))
             self.cells[row][col].grid(row=row,column=col)
             self.cells[row][col].initialise(self, row, col)
-        self.flat = [cell for row in self.cells for cell in row]
 
-        # buttons
+        # Set up the neighbour data.
+        for c in [cell for row in self.cells for cell in row]:
+            c.addNeighbours(self)
+
+        # Buttons.
         self.start = Button(self.gol, text = "Start")
         self.start["command"] = lambda: self.generate()
         self.start.grid(row=0, column = self.size+1,rowspan=3)
@@ -45,7 +58,7 @@ class Gol():
         self.reset["command"] = lambda: self.clear()
         self.reset.grid(row=4, column = self.size+1, rowspan=3)
 
-        # labels
+        # Labels.
         self.gens = Label(self.gol,text = "Generations:\n0", fg="blue")
         self.gens.grid(row=6, column = self.size+1, rowspan=5, padx=3)
 
@@ -54,7 +67,8 @@ class Gol():
 
         self.active = Label(self.gol, text= "Population:\n0", fg="blue")
         self.active.grid(row=10, column = self.size+1, rowspan=5,padx=3)
-        
+
+        # Start the loop running.
         self.root.mainloop()
         
     
@@ -63,8 +77,8 @@ class Gol():
         self.generating = self.generations = 0
         self.message="Cleared"
         self.refresh()
-        # Turn off all alive cells.
-        for cell in [x for x in self.flat if x.status]:
+        # Turn off all alive cells. Make into a list first, so we can modify the set.
+        for cell in [x for x in self.watch if x.status]:
             cell.toggle(self)
             
     def refresh(self):
@@ -101,20 +115,23 @@ class Gol():
                 
     def nextGen(self):
         """Make changes to display next generation."""
-        # Find out status of next generation.
+        # List of cells that will change.
         temp =[]
-        for cell in self.flat:
-            count = sum([self.cells[r][c].status for (r, c) in cell.neighbours])
-            if cell.status and count == 2:
-                cell.next = 1
-            elif count == 3:
-                cell.next = 1
-            else:
-                cell.next = 0
-            if cell.status != cell.next:
-                temp.append(cell)
 
-        # Apply changes
+        # Cells we can remove from watch list.
+        ignore = set()
+        
+        for cell in self.watch:
+            if cell.willChange():
+                temp.append(cell)
+            # If a cell's neighbours are all dead, remove from the list.
+            if not cell.nCount:
+                ignore.add(cell)
+
+        # Update watch list.
+        self.watch = self.watch.difference(ignore)
+
+        # Apply changes - only to cells that have changed.
         self.changed = False
         for cell in temp:
             cell.toggle(self)
@@ -139,17 +156,40 @@ class Cell(Button):
         self.next = 0
         self.neighbours =[]
         
-        # Assign neighbours. Taking care to avoid index errors.
-        if row > 0:
-            if col > 0:
-                self.neighbours.append((row-1, col-1))
-            if col < (parent.size - 1):
-                self.neighbours.extend(((row-1, col), (row-1, col+1)))
-        if row < (parent.size - 1):
-            if  col > 0:
-                self.neighbours.extend(((row, col-1), (row+1, col-1)))
-            if col < (parent.size - 1):
-                self.neighbours.extend(((row,col+1), (row+1, col), (row+1, col+1)))
+        # How many live neighbours.
+        self.nCount = 0
+
+    def willChange(self):
+        """Check if cell lives or dies."""
+        self.nCount = sum([x.status for x in self.neighbours])
+            # These are the rules for whether the cell lives on.
+        if self.status and self.nCount == 2:
+            self.next = 1
+        elif self.nCount == 3:
+            self.next = 1
+        else:
+            self.next = 0
+        if self.status != self.next:
+            return 1
+        else:
+            return 0
+
+    def addNeighbours(self, parent):
+        """Assign neighbours. Taking care to avoid index errors."""
+        if self.row > 0:
+            if self.col > 0:
+                self.neighbours.append(parent.cells[self.row-1][self.col-1])
+            if self.col < (parent.size - 1):
+                self.neighbours.extend((parent.cells[self.row-1][self.col],
+                                        parent.cells[self.row-1][self.col+1]))
+        if self.row < (parent.size - 1):
+            if  self.col > 0:
+                self.neighbours.extend((parent.cells[self.row][self.col-1],
+                                        parent.cells[self.row+1][self.col-1]))
+            if self.col < (parent.size - 1):
+                self.neighbours.extend((parent.cells[self.row][self.col+1],
+                                       parent.cells[self.row+1][self.col],
+                                       parent.cells[self.row+1][self.col+1]))
 
 
     def toggle(self, parent):
@@ -157,6 +197,11 @@ class Cell(Button):
         if self.status == 0:
             self.status = 1
             parent.alive += 1
+            # Add to watch list.
+            parent.watch.add(self)
+            # Add neighbours to watch list.
+            for n in self.neighbours:
+                parent.watch.add(n)
             self.configure(bg="white")
         else:
             self.status = 0
